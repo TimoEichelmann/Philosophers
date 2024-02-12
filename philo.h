@@ -20,7 +20,7 @@
 typedef struct s_philosopher {
 	struct s_philosopher *prior;
 	int	fork;
-	int	dead;
+	int	*dead;
 	int	num;
 	int	t_die;
 	int	t_eat;

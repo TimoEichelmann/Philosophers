@@ -26,7 +26,7 @@ int	input(int	argc, char **argv)
 	if (argc == 6)
 		result->must_eat = ft_atoi(argv[5]);
 	if (result->die < 1 || result->eat < 1 || result->sleep < 1
-			|| argv[1][0] < '1' || result->must_eat < 1)
+			|| argv[1][0] < '1' || result->must_eat < 1 || ft_atoi(argv[1]) > 200)
 	{
 		printf("Wrong input.\n");
 		free(result);
@@ -50,7 +50,7 @@ void	insert(t_philosopher *result, char **argv, int argc, int i)
 	result->total = ft_atoi(argv[1]);
 }
 
-t_philosopher	*philos_init(char **argv, int argc)
+t_philosopher	*philos_init(char **argv, int argc, int *d)
 {
 	t_philosopher	*result;
 	t_philosopher	*p;
@@ -70,6 +70,7 @@ t_philosopher	*philos_init(char **argv, int argc)
 		if (p == NULL)
 			start = result;
 		insert(result, argv, argc, i + 1);
+		result->dead = d;
 		p = result;
 		i++;
 	}
@@ -92,17 +93,27 @@ int	last(t_philosopher *p)
 void	*routine(void *arg)
 {
 	t_philosopher 	*p;
+	int				mealcount;
 
 	p = (t_philosophr *)arg;
 	usleep(50);
-	
+	while (*p->dead != 1)
+	{
+		//implement something to track whether philo has eaten in order to sleep and timer for t_die count and mealcount
+		//mutexes for trying to eat;
+		printf("philosopher %d is sleeping.", p->num);
+		usleep(p->t_sleep);
+		printf("philsopher %d is thinking", p->num);
+	}
 }
 
 int	threads(t_philosopher *philos, t_times *times, int philo_count)
 {
 	int			i;
 	pthread_t	*th;
+	int			*dead;
 
+	dead = philos->dead;
 	th = malloc(sizeof(pthread_t) * philo_count);
 	if (!th)
 		return (-1);
@@ -114,10 +125,8 @@ int	threads(t_philosopher *philos, t_times *times, int philo_count)
 		i++;
 	}
 	i = 0;
-	while (i < philo_count)
-	{
-		pthread_join(th[i], NULL);
-	}
+	while (*dead != 1)
+
 }
 
 void	free_list(t_philosopher *p)
@@ -140,10 +149,12 @@ void	free_list(t_philosopher *p)
 int	main(int argc, char **argv)
 {
 	t_philosopher	*philos;
-	
+	int				*d;
+
+	*d = 0;
 	if (input(argc, argv) == -1)
 		return (0);
-	philos = philos_init(argv, argc);
+	philos = philos_init(argv, argc, d);
 	free_list(philos);
 	// threads(philos, times, ft_atoi(argv[1]));
 	free(philos);
