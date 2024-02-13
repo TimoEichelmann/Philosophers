@@ -6,7 +6,7 @@
 /*   By: teichelm <teichelm@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2024/01/31 14:15:44 by teichelm          #+#    #+#             */
-/*   Updated: 2024/02/05 13:48:05 by teichelm         ###   ########.fr       */
+/*   Updated: 2024/02/13 16:10:54 by teichelm         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -45,6 +45,7 @@ void	insert(t_philosopher *result, char **argv, int argc, int i)
 	result->t_eat = ft_atoi(argv[3]);
 	result->t_sleep = ft_atoi(argv[4]);
 	result->t_must_eat = -1;
+	result->thinking = 0;
 	if (argc == 6)
 		result->t_must_eat = ft_atoi(argv[5]);
 	result->total = ft_atoi(argv[1]);
@@ -79,35 +80,77 @@ t_philosopher	*philos_init(char **argv, int argc, int *d)
 	return (start);
 }
 
-int	last(t_philosopher *p)
+int	take_forks(t_philosopher *p)
 {
-	int	i;
+	int	ind;
 
-	i = 0;
-	while (p[i].dead != -1)
-		i++;
-	return (i);
+	pthread_mutex_lock(&p->mutex);
+	printf("philosopher %d has taken his fork in state %d\n", p->num, p->fork);
+	p->fork = 0;
+	if (p->prior->fork == 1)
+	{
+		p->prior->fork = 0;
+		ind = 0;
+	}
+	else
+	{
+		p->next->fork = 0;
+		ind = 1;
+	}
+	if (ind == 0)
+		printf("philosopher %d has taken a fork of %d\n", p->num, p->prior->num);
+	if (ind == 1)
+		printf("philosopher %d has taken a fork of %d\n", p->num, p->next->num);
+	pthread_mutex_unlock(&p->mutex);
+	return (ind);
 }
 
-//philo routine : try to eat, if not possible, sleep, think, repeat;
+void	drop_forks(t_philosopher *p, int ind)
+{
+	
+	pthread_mutex_lock(&p->mutex);
+	p->fork = 1;
+	if (ind == 0)
+		p->prior->fork = 1;
+	else
+		p->next->fork = 1;
+	printf("philosopher %d has dropped forks\n", p->num);
+	pthread_mutex_unlock(&p->mutex);
+}
+
 void	*routine(void *arg)
 {
 	t_philosopher 	*p;
 	int				mealcount;
+	int				ind;
+	int				i;
 
-	p = (t_philosophr *)arg;
-	usleep(50);
-	while (*p->dead != 1)
+	i = 0;
+	p = (t_philosopher *)arg;
+	usleep(20);
+	while (i < 5)
 	{
-		//implement something to track whether philo has eaten in order to sleep and timer for t_die count and mealcount
-		//mutexes for trying to eat;
-		printf("philosopher %d is sleeping.", p->num);
-		usleep(p->t_sleep);
-		printf("philsopher %d is thinking", p->num);
+		if ((p->prior->fork == 1 || p->next->fork == 1) && p->fork == 1)
+		{
+			p->thinking = 0;
+			ind = take_forks(p);
+			printf("philosopher %d is eating\n", p->num);
+			usleep(p->t_eat);
+			drop_forks(p, ind);
+			printf("philosopher %d is sleeping.\n", p->num);
+			usleep(p->t_sleep);
+		}
+		if (p->thinking == 0)
+		{
+			p->thinking = 1;
+			printf("philsopher %d is thinking\n", p->num);
+		}
+		i++;
 	}
+	return (NULL);
 }
 
-int	threads(t_philosopher *philos, t_times *times, int philo_count)
+int	threads(t_philosopher *philos, int philo_count)
 {
 	int			i;
 	pthread_t	*th;
@@ -120,13 +163,18 @@ int	threads(t_philosopher *philos, t_times *times, int philo_count)
 	i = 0;
 	while (i < philo_count)
 	{
-		pthread_create(th[i], NULL, routine, (void *)philos);
+		pthread_mutex_init(&philos->mutex, NULL);
+		pthread_create(&th[i], NULL, routine, (void *)philos);
 		philos = philos->next;
 		i++;
 	}
 	i = 0;
-	while (*dead != 1)
-
+	while (i < philo_count)
+	{
+		pthread_join(th[i], NULL);
+		i++;
+	}
+	return (0);
 }
 
 void	free_list(t_philosopher *p)
@@ -151,11 +199,11 @@ int	main(int argc, char **argv)
 	t_philosopher	*philos;
 	int				*d;
 
+	d = malloc(sizeof(int));
 	*d = 0;
 	if (input(argc, argv) == -1)
 		return (0);
 	philos = philos_init(argv, argc, d);
+	threads(philos, ft_atoi(argv[1]));
 	free_list(philos);
-	// threads(philos, times, ft_atoi(argv[1]));
-	free(philos);
 }
