@@ -3,183 +3,93 @@
 /*                                                        :::      ::::::::   */
 /*   philo.c                                            :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: teichelm <teichelm@student.42.fr>          +#+  +:+       +#+        */
+/*   By: timo <timo@student.42.fr>                  +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2024/01/31 14:15:44 by teichelm          #+#    #+#             */
-/*   Updated: 2024/02/13 16:10:54 by teichelm         ###   ########.fr       */
+/*   Updated: 2024/03/12 00:42:54 by timo             ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
 #include "philo.h"
 
-int	input(int	argc, char **argv)
-{
-	t_times *result;
-	
-	if (!(argc >= 5 && argc < 7))
-		return (-1);
-	result = malloc(sizeof(t_times));
-	result->die = ft_atoi(argv[2]);
-	result->eat = ft_atoi(argv[3]);
-	result->sleep = ft_atoi(argv[4]);
-	result->must_eat = -1;
-	if (argc == 6)
-		result->must_eat = ft_atoi(argv[5]);
-	if (result->die < 1 || result->eat < 1 || result->sleep < 1
-			|| argv[1][0] < '1' || result->must_eat < 1 || ft_atoi(argv[1]) > 200)
-	{
-		printf("Wrong input.\n");
-		free(result);
-		return (-1);
-	}
-	free(result);
-	return (0);
-}
-
-void	insert(t_philosopher *result, char **argv, int argc, int i)
-{
-	result->fork = 1;
-	result->dead = 0;
-	result->num = i;
-	result->t_die = ft_atoi(argv[2]);
-	result->t_eat = ft_atoi(argv[3]);
-	result->t_sleep = ft_atoi(argv[4]);
-	result->t_must_eat = -1;
-	result->thinking = 0;
-	if (argc == 6)
-		result->t_must_eat = ft_atoi(argv[5]);
-	result->total = ft_atoi(argv[1]);
-}
-
-t_philosopher	*philos_init(char **argv, int argc, int *d)
-{
-	t_philosopher	*result;
-	t_philosopher	*p;
-	t_philosopher	*start;
-	int				i;
-	
-	p = NULL;
-	i = 0;
-	while (i < ft_atoi(argv[1]))
-	{
-		result = malloc(sizeof(t_philosopher));
-		if (p)
-		{
-			result->prior = p;
-			p->next = result;
-		}
-		if (p == NULL)
-			start = result;
-		insert(result, argv, argc, i + 1);
-		result->dead = d;
-		p = result;
-		i++;
-	}
-	p->next = start;
-	start->prior = p;
-	return (start);
-}
-
-int	take_forks(t_philosopher *p)
-{
-	int	ind;
-
-	pthread_mutex_lock(&p->mutex);
-	printf("philosopher %d has taken his fork in state %d\n", p->num, p->fork);
-	p->fork = 0;
-	if (p->prior->fork == 1)
-	{
-		p->prior->fork = 0;
-		ind = 0;
-	}
-	else
-	{
-		p->next->fork = 0;
-		ind = 1;
-	}
-	if (ind == 0)
-		printf("philosopher %d has taken a fork of %d\n", p->num, p->prior->num);
-	if (ind == 1)
-		printf("philosopher %d has taken a fork of %d\n", p->num, p->next->num);
-	pthread_mutex_unlock(&p->mutex);
-	return (ind);
-}
-
-void	drop_forks(t_philosopher *p, int ind)
-{
-	
-	pthread_mutex_lock(&p->mutex);
-	p->fork = 1;
-	if (ind == 0)
-		p->prior->fork = 1;
-	else
-		p->next->fork = 1;
-	printf("philosopher %d has dropped forks\n", p->num);
-	pthread_mutex_unlock(&p->mutex);
-}
-
 void	*routine(void *arg)
 {
-	t_philosopher 	*p;
-	int				mealcount;
-	int				ind;
-	int				i;
+	t_philo	*p;
 
-	i = 0;
-	p = (t_philosopher *)arg;
-	usleep(20);
-	while (i < 5)
+	p = (t_philo *)arg;
+	while (*p->dead != 1 && p->mealcount != p->t_must_eat)
 	{
-		if ((p->prior->fork == 1 || p->next->fork == 1) && p->fork == 1)
-		{
-			p->thinking = 0;
-			ind = take_forks(p);
-			printf("philosopher %d is eating\n", p->num);
-			usleep(p->t_eat);
-			drop_forks(p, ind);
-			printf("philosopher %d is sleeping.\n", p->num);
-			usleep(p->t_sleep);
-		}
-		if (p->thinking == 0)
-		{
-			p->thinking = 1;
-			printf("philsopher %d is thinking\n", p->num);
-		}
-		i++;
+		printf_message(p, 3);
+		take_forks(p);
+		p->mealcount++;
+		p->last_meal = timestamp(p->start);
+		printf_message(p, 1);
+		usleep(p->t_eat * 1000);
+		pthread_mutex_unlock(&p->fork);
+		pthread_mutex_unlock(&p->next->fork);
+		printf_message(p, 2);
+		usleep(p->t_sleep * 1000);
+		if (p->mealcount == p->t_must_eat)
+			return (NULL);
 	}
 	return (NULL);
 }
 
-int	threads(t_philosopher *philos, int philo_count)
+int	observation(t_philo *p, int philo_count, pthread_t *th)
+{
+	int	i;
+	int	*count;
+
+	count = malloc(sizeof(int) * philo_count);
+	memset(count, '0', philo_count);
+	i = 0;
+	while (*p->dead != 1)
+	{
+		while (i < philo_count && *p->dead != 1)
+		{
+			if (p->mealcount < p->t_must_eat
+				&& timestamp(p->start) - p->last_meal >= p->t_die)
+				dead(p);
+			if (p->mealcount == p->t_must_eat)
+				count[i] = '1';
+			if (!check_meals(count, philo_count))
+				*p->dead = 1;
+			i++;
+			p = p->next;
+		}
+		i = 0;
+	}
+	usleep(10);
+	detach(th, philo_count, count);
+	return (1);
+}
+
+int	threads(t_philo *philos, int philo_count)
 {
 	int			i;
 	pthread_t	*th;
-	int			*dead;
 
-	dead = philos->dead;
 	th = malloc(sizeof(pthread_t) * philo_count);
 	if (!th)
 		return (-1);
 	i = 0;
 	while (i < philo_count)
 	{
-		pthread_mutex_init(&philos->mutex, NULL);
+		pthread_mutex_init(&philos->fork, NULL);
+		start_time(philos, philo_count);
 		pthread_create(&th[i], NULL, routine, (void *)philos);
 		philos = philos->next;
 		i++;
 	}
+	observation(philos, philo_count, th);
+	free(th);
 	i = 0;
-	while (i < philo_count)
-	{
-		pthread_join(th[i], NULL);
-		i++;
-	}
-	return (0);
+	return (1);
 }
 
-void	free_list(t_philosopher *p)
+void	free_list(t_philo *p)
 {
-	t_philosopher *p2;
+	t_philo			*p2;
 	int				i;
 	int				total;
 
@@ -187,6 +97,7 @@ void	free_list(t_philosopher *p)
 	i = 0;
 	while (i < total)
 	{
+		pthread_mutex_destroy(&p->fork);
 		p2 = p->next;
 		free(p);
 		p = p2;
@@ -196,14 +107,18 @@ void	free_list(t_philosopher *p)
 
 int	main(int argc, char **argv)
 {
-	t_philosopher	*philos;
+	t_philo			*philos;
+	pthread_mutex_t	death;
 	int				*d;
 
-	d = malloc(sizeof(int));
-	*d = 0;
 	if (input(argc, argv) == -1)
 		return (0);
-	philos = philos_init(argv, argc, d);
+	d = malloc(sizeof(int));
+	*d = 0;
+	pthread_mutex_init(&death, NULL);
+	philos = philos_init(argv, argc, d, &death);
 	threads(philos, ft_atoi(argv[1]));
+	free(d);
+	pthread_mutex_destroy(&death);
 	free_list(philos);
 }
